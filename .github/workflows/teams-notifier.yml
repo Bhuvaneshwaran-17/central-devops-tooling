@@ -1,0 +1,39 @@
+name: Centralized Teams Notifier
+on:
+  workflow_call:
+    inputs:
+      component_name:
+        required: true
+        type: string
+      status:
+        required: true
+        type: string
+    secrets:
+      WEBHOOK_URL:
+        required: true
+
+jobs:
+  send-alert:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch Teams Card
+        run: |
+          # This single block now handles EVERY component (Backend, Frontend, etc.)
+          COLOR="${{ inputs.status == 'success' && 'Good' || 'Attention' }}"
+          ICON="${{ inputs.status == 'success' && '✅' || '❌' }}"
+
+          curl -H 'Content-Type: application/json' -d '{
+            "type": "message",
+            "attachments": [{
+              "contentType": "application/vnd.microsoft.card.adaptive",
+              "content": {
+                "type": "AdaptiveCard",
+                "body": [
+                  { "type": "TextBlock", "text": "'"$ICON"' '"${{ inputs.component_name }}"' BUILD '"${{ inputs.status }}"'", "weight": "Bolder", "size": "Large", "color": "'"$COLOR"'" },
+                  { "type": "TextBlock", "text": "Repository: ${{ github.repository }}", "wrap": true }
+                ],
+                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "version": "1.4"
+              }
+            }]
+          }' "${{ secrets.WEBHOOK_URL }}"

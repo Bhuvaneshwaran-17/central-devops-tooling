@@ -1,0 +1,52 @@
+name: "Master Node Build Template"
+
+on:
+  workflow_call:
+    inputs:
+      project_name:
+        required: true
+        type: string
+      node-version:
+        required: false
+        type: string
+        default: "20"
+      working_directory:
+        required: false
+        type: string
+        default: "."
+      build_command:
+        required: false
+        type: string
+        default: "npm install && npm run build"
+    secrets:
+      WEBHOOK_URL:
+        required: true
+
+jobs:
+  node-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+          cache-dependency-path: ${{ inputs.working_directory }}/package-lock.json
+
+      - name: Execute Build
+        run: |
+          cd ${{ inputs.working_directory }}
+          ${{ inputs.build_command }}
+
+      - name: Notify Failure
+        if: failure()
+        uses: Bhuvaneshwaran-17/central-devops-tooling/.github/workflows/teams-notifier.yml@main
+        with:
+          project_name: ${{ inputs.project_name }}
+          component_name: "NODE-FRONTEND"
+          status: "FAILURE"
+        secrets:
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}

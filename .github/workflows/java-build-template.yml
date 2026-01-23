@@ -1,0 +1,55 @@
+name: "Master Java Build Template"
+
+on:
+  workflow_call:
+    inputs:
+      project_name:
+        description: "The name of the project for notification purposes"
+        required: true
+        type: string
+      java-version:
+        description: "The JDK version required (e.g., '17', '21')"
+        required: false
+        type: string
+        default: "17"
+      pom_path:
+        description: "Path to the pom.xml file"
+        required: false
+        type: string
+        default: "pom.xml"
+      build_command:
+        description: "The Maven command to execute"
+        required: false
+        type: string
+        default: "mvn clean compile"
+    secrets:
+      WEBHOOK_URL:
+        description: "The Teams Webhook URL for alerts"
+        required: true
+
+jobs:
+  standard-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java Runtime
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ inputs.java-version }}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Execute Build
+        run: ${{ inputs.build_command }} -f ${{ inputs.pom_path }}
+
+      - name: Notify Failure
+        if: failure()
+        uses: Bhuvaneshwaran-17/central-devops-tooling/.github/workflows/teams-notifier.yml@main
+        with:
+          project_name: ${{ inputs.project_name }}
+          component_name: "JAVA-BACKEND"
+          status: "FAILURE"
+        secrets:
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}

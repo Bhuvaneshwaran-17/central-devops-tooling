@@ -2,6 +2,9 @@ name: Centralized Teams Notifier
 on:
   workflow_call:
     inputs:
+      project_name:      # ADD THIS MISSING BLOCK
+        required: true
+        type: string
       component_name:
         required: true
         type: string
@@ -18,9 +21,8 @@ jobs:
     steps:
       - name: Dispatch Teams Card
         run: |
-          # This single block now handles EVERY component (Backend, Frontend, etc.)
-          COLOR="${{ inputs.status == 'success' && 'Good' || 'Attention' }}"
-          ICON="${{ inputs.status == 'success' && '✅' || '❌' }}"
+          COLOR="${{ inputs.status == 'SUCCESS' && 'Good' || 'Attention' }}"
+          ICON="${{ inputs.status == 'SUCCESS' && '✅' || '❌' }}"
 
           curl -H 'Content-Type: application/json' -d '{
             "type": "message",
@@ -29,7 +31,8 @@ jobs:
               "content": {
                 "type": "AdaptiveCard",
                 "body": [
-                  { "type": "TextBlock", "text": "'"$ICON"' '"${{ inputs.component_name }}"' BUILD '"${{ inputs.status }}"'", "weight": "Bolder", "size": "Large", "color": "'"$COLOR"'" },
+                  { "type": "TextBlock", "text": "'"$ICON"' ${{ inputs.project_name }} - ${{ inputs.component_name }}", "weight": "Bolder", "size": "Large", "color": "'"$COLOR"'" },
+                  { "type": "TextBlock", "text": "Status: ${{ inputs.status }}", "wrap": true },
                   { "type": "TextBlock", "text": "Repository: ${{ github.repository }}", "wrap": true }
                 ],
                 "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",

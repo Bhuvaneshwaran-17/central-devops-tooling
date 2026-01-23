@@ -28,20 +28,17 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node-version }}
           cache: 'npm'
           cache-dependency-path: ${{ inputs.working_directory }}/package-lock.json
-
       - name: Execute Build
         run: |
           cd ${{ inputs.working_directory }}
           ${{ inputs.build_command }}
 
-  # FIXED: Notifier is now a separate JOB
   notify-on-failure:
     needs: node-build
     if: failure()

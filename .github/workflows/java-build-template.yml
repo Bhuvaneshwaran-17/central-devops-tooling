@@ -28,18 +28,15 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-
       - name: Setup Java Runtime
         uses: actions/setup-java@v4
         with:
           java-version: ${{ inputs.java-version }}
           distribution: 'temurin'
           cache: 'maven'
-
       - name: Execute Build
         run: ${{ inputs.build_command }} -f ${{ inputs.pom_path }}
 
-  # THIS IS THE FIX: The Notifier is now a JOB, not a step.
   notify-on-failure:
     needs: standard-build
     if: failure()

@@ -1,8 +1,9 @@
 name: Centralized Teams Notifier
+
 on:
   workflow_call:
     inputs:
-      project_name:      # ADD THIS MISSING BLOCK
+      project_name:
         required: true
         type: string
       component_name:
@@ -21,10 +22,16 @@ jobs:
     steps:
       - name: Dispatch Teams Card
         run: |
-          COLOR="${{ inputs.status == 'SUCCESS' && 'Good' || 'Attention' }}"
-          ICON="${{ inputs.status == 'SUCCESS' && '✅' || '❌' }}"
+          # Ensure status comparison is case-insensitive by using uppercase
+          STATUS_UPPER=$(echo "${{ inputs.status }}" | tr '[:lower:]' '[:upper:]')
+          COLOR="Attention"
+          ICON="❌"
+          if [ "$STATUS_UPPER" == "SUCCESS" ]; then
+            COLOR="Good"
+            ICON="✅"
+          fi
 
-          curl -H 'Content-Type: application/json' -d '{
+          curl -f -H 'Content-Type: application/json' -d '{
             "type": "message",
             "attachments": [{
               "contentType": "application/vnd.microsoft.card.adaptive",
@@ -32,7 +39,7 @@ jobs:
                 "type": "AdaptiveCard",
                 "body": [
                   { "type": "TextBlock", "text": "'"$ICON"' ${{ inputs.project_name }} - ${{ inputs.component_name }}", "weight": "Bolder", "size": "Large", "color": "'"$COLOR"'" },
-                  { "type": "TextBlock", "text": "Status: ${{ inputs.status }}", "wrap": true },
+                  { "type": "TextBlock", "text": "Status: '"$STATUS_UPPER"'", "wrap": true },
                   { "type": "TextBlock", "text": "Repository: ${{ github.repository }}", "wrap": true }
                 ],
                 "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",

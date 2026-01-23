@@ -41,12 +41,14 @@ jobs:
           cd ${{ inputs.working_directory }}
           ${{ inputs.build_command }}
 
-      - name: Notify Failure
-        if: failure()
-        uses: Bhuvaneshwaran-17/central-devops-tooling/.github/workflows/teams-notifier.yml@main
-        with:
-          project_name: ${{ inputs.project_name }}
-          component_name: "NODE-FRONTEND"
-          status: "FAILURE"
-        secrets:
-          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+  # FIXED: Notifier is now a separate JOB
+  notify-on-failure:
+    needs: node-build
+    if: failure()
+    uses: Bhuvaneshwaran-17/central-devops-tooling/.github/workflows/teams-notifier.yml@main
+    with:
+      project_name: ${{ inputs.project_name }}
+      component_name: "NODE-FRONTEND"
+      status: "FAILURE"
+    secrets:
+      WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}

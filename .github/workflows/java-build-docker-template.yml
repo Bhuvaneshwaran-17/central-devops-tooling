@@ -1,0 +1,57 @@
+name: "Master Java Build Template"
+
+on:
+  workflow_call:
+    inputs:
+      project_name:
+        required: true
+        type: string
+      java-version:
+        required: false
+        type: string
+        default: "21"  # Matched to your environment
+      pom_path:
+        required: false
+        type: string
+        default: "pom.xml"
+      build_command:
+        required: false
+        type: string
+        default: "mvn clean package -DskipTests" # Ensure JAR is created
+    secrets:
+      WEBHOOK_URL:
+        required: true
+
+jobs:
+  standard-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java Runtime
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ inputs.java-version }}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Execute Build
+        run: ${{ inputs.build_command }} -f ${{ inputs.pom_path }}
+
+      # ADDED: Build Docker Image (The Core of ABP)
+      - name: Build Docker Image
+        run: |
+          docker build -t ${{ inputs.project_name }}:latest .
+          echo "Docker Image for ${{ inputs.project_name }} built successfully."
+
+  notify-on-failure:
+    needs: standard-build
+    if: failure()
+    uses: Bhuvaneshwaran-17/central-devops-tooling/.github/workflows/teams-notifier.yml@main
+    with:
+      project_name: ${{ inputs.project_name }}
+      component_name: "JAVA-BACKEND"
+      status: "FAILURE"
+    secrets:
+      WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}

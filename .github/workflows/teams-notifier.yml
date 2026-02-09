@@ -9,6 +9,9 @@ on:
       component_name:
         required: true
         type: string
+      job_name: # NEW INPUT
+        required: true
+        type: string
       status:
         required: true
         type: string
@@ -22,14 +25,9 @@ jobs:
     steps:
       - name: Dispatch Teams Card
         run: |
-          # Ensure status comparison is case-insensitive by using uppercase
           STATUS_UPPER=$(echo "${{ inputs.status }}" | tr '[:lower:]' '[:upper:]')
-          COLOR="Attention"
-          ICON="❌"
-          if [ "$STATUS_UPPER" == "SUCCESS" ]; then
-            COLOR="Good"
-            ICON="✅"
-          fi
+          COLOR=$([ "$STATUS_UPPER" == "SUCCESS" ] && echo "Good" || echo "Attention")
+          ICON=$([ "$STATUS_UPPER" == "SUCCESS" ] && echo "✅" || echo "❌")
 
           curl -f -H 'Content-Type: application/json' -d '{
             "type": "message",
@@ -38,12 +36,19 @@ jobs:
               "content": {
                 "type": "AdaptiveCard",
                 "body": [
-                  { "type": "TextBlock", "text": "'"$ICON"' ${{ inputs.project_name }} - ${{ inputs.component_name }}", "weight": "Bolder", "size": "Large", "color": "'"$COLOR"'" },
-                  { "type": "TextBlock", "text": "Status: '"$STATUS_UPPER"'", "wrap": true },
-                  { "type": "TextBlock", "text": "Repository: ${{ github.repository }}", "wrap": true }
+                  { "type": "TextBlock", "text": "'"$ICON"' ${{ inputs.project_name }}", "weight": "Bolder", "size": "Large", "color": "'"$COLOR"'" },
+                  { "type": "FactSet", "facts": [
+                      { "title": "Service:", "value": "${{ inputs.component_name }}" },
+                      { "title": "Stage/Job:", "value": "${{ inputs.job_name }}" },
+                      { "title": "Status:", "value": "'"$STATUS_UPPER"'" },
+                      { "title": "Actor:", "value": "${{ github.actor }}" }
+                    ]
+                  },
+                  { "type": "ActionSet", "actions": [
+                    { "type": "Action.OpenUrl", "title": "View Logs", "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" }
+                  ]}
                 ],
-                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                "version": "1.4"
+                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json", "version": "1.4"
               }
             }]
           }' "${{ secrets.WEBHOOK_URL }}"

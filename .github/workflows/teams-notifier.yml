@@ -9,12 +9,16 @@ on:
       component_name:
         required: true
         type: string
-      job_name: # NEW INPUT
+      job_name:
         required: true
         type: string
       status:
         required: true
         type: string
+      rca:
+        required: false
+        type: string
+        default: ""
     secrets:
       WEBHOOK_URL:
         required: true
@@ -23,32 +27,98 @@ jobs:
   send-alert:
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch Teams Card
+      - name: Prepare RCA (Safe JSON Encoding)
+        id: prep
+        shell: python
+        env:
+          RCA_INPUT: ${{ inputs.rca }}
         run: |
-          STATUS_UPPER=$(echo "${{ inputs.status }}" | tr '[:lower:]' '[:upper:]')
-          COLOR=$([ "$STATUS_UPPER" == "SUCCESS" ] && echo "Good" || echo "Attention")
-          ICON=$([ "$STATUS_UPPER" == "SUCCESS" ] && echo "✅" || echo "❌")
+          import json
+          import os
 
-          curl -f -H 'Content-Type: application/json' -d '{
+          rca_raw = os.environ.get("RCA_INPUT", "").strip()
+          
+          # Truncate to stay within Teams payload limits (approx 20KB for safety)
+          rca_truncated = rca_raw[:20000]
+          
+          if not rca_truncated:
+              rca_truncated = "(No AI root-cause summary provided)"
+          
+          # We export it as a JSON-encoded string to handle newlines/quotes safely
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              print(f'rca_json={json.dumps(rca_truncated)}', file=f)
+
+      - name: Dispatch Teams Card
+        env:
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+          PROJECT_NAME: ${{ inputs.project_name }}
+          COMPONENT_NAME: ${{ inputs.component_name }}
+          JOB_NAME: ${{ inputs.job_name }}
+          STATUS_IN: ${{ inputs.status }}
+          RUN_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          ACTOR: ${{ github.actor }}
+          RCA_JSON: ${{ steps.prep.outputs.rca_json }}
+        shell: bash
+        run: |
+          # Determine Color and Emoji
+          STATUS_UPPER=$(echo "$STATUS_IN" | tr '[:lower:]' '[:upper:]')
+          if [[ "$STATUS_UPPER" == "SUCCESS" ]]; then
+            COLOR="Good"
+            ICON="✅"
+          else
+            COLOR="Attention"
+            ICON="❌"
+          fi
+
+          # Use a HEREDOC to build the JSON, then inject the pre-encoded RCA_JSON
+          # Note: We use ${RCA_JSON} without extra quotes because json.dumps already added them.
+          cat <<EOF > payload.json
+          {
             "type": "message",
-            "attachments": [{
-              "contentType": "application/vnd.microsoft.card.adaptive",
-              "content": {
-                "type": "AdaptiveCard",
-                "body": [
-                  { "type": "TextBlock", "text": "'"$ICON"' ${{ inputs.project_name }}", "weight": "Bolder", "size": "Large", "color": "'"$COLOR"'" },
-                  { "type": "FactSet", "facts": [
-                      { "title": "Service:", "value": "${{ inputs.component_name }}" },
-                      { "title": "Stage/Job:", "value": "${{ inputs.job_name }}" },
-                      { "title": "Status:", "value": "'"$STATUS_UPPER"'" },
-                      { "title": "Actor:", "value": "${{ github.actor }}" }
-                    ]
-                  },
-                  { "type": "ActionSet", "actions": [
-                    { "type": "Action.OpenUrl", "title": "View Logs", "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" }
-                  ]}
-                ],
-                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json", "version": "1.4"
+            "attachments": [
+              {
+                "contentType": "application/vnd.microsoft.card.adaptive",
+                "content": {
+                  "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                  "version": "1.4",
+                  "type": "AdaptiveCard",
+                  "body": [
+                    {
+                      "type": "TextBlock",
+                      "text": "${ICON} ${PROJECT_NAME}",
+                      "weight": "Bolder",
+                      "size": "ExtraLarge",
+                      "color": "${COLOR}"
+                    },
+                    {
+                      "type": "FactSet",
+                      "facts": [
+                        { "title": "Service:", "value": "${COMPONENT_NAME}" },
+                        { "title": "Stage/Job:", "value": "${JOB_NAME}" },
+                        { "title": "Status:", "value": "${STATUS_UPPER}" },
+                        { "title": "Actor:", "value": "${ACTOR}" }
+                      ]
+                    },
+                    {
+                      "type": "TextBlock",
+                      "text": ${RCA_JSON},
+                      "wrap": true,
+                      "fontType": "Monospace",
+                      "size": "Small",
+                      "spacing": "Medium"
+                    }
+                  ],
+                  "actions": [
+                    {
+                      "type": "Action.OpenUrl",
+                      "title": "View Logs",
+                      "url": "${RUN_URL}"
+                    }
+                  ]
+                }
               }
-            }]
-          }' "${{ secrets.WEBHOOK_URL }}"
+            ]
+          }
+          EOF
+
+          curl -f -H 'Content-Type: application/json' -d @payload.json "$WEBHOOK_URL"
